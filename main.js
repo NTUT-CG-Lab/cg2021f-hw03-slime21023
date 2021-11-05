@@ -4,8 +4,9 @@ import {
     OrthographicCamera,
     AmbientLight,
     DirectionalLight,
-    Cache,
-    Vector3
+    Vector3,
+    Box3,
+    TetrahedronGeometry
 } from './build/three.module.js'
 // import { GUI } from './jsm/libs/dat.gui.module.js'
 import { OrbitControls } from './jsm/controls/OrbitControls.js'
@@ -13,11 +14,11 @@ import { OutlineEffect } from './jsm/effects/OutlineEffect.js'
 import { MMDLoader } from './jsm/loaders/MMDLoader.js'
 // import { MMDAnimationHelper } from './jsm/animation/MMDAnimationHelper.js'
 
-Cache.enabled = true
 const scene = new Scene()
 const renderer = new WebGLRenderer({ antialias: true })
 renderer.autoClear = false
 
+ // TODO
 let SCREEN_WIDTH = window.innerWidth
 let SCREEN_HEIGHT = window.innerHeight
 let aspect = SCREEN_WIDTH / SCREEN_HEIGHT
@@ -28,7 +29,7 @@ const modelList = [
     'models/mmd/『天宮こころ(Kokoro Amamiya)』/『天宮こころ(Kokoro Amamiya)』.pmx'
 ]
 
-let modelIndex = 0
+let modelIndex = 1
 
 Ammo().then(AmmoLib => {
     Ammo = AmmoLib
@@ -57,17 +58,16 @@ class IrisReviser {
             camera.position.z = 30
             scene.add(camera)
         })
-        this.control = new OrbitControls(this.cameras[0], renderer.domElement)
-        this.control.minDistance = 10
-        this.control.maxDistance = 100
-        this.control.enableRotate = false
-
         this.effect = new OutlineEffect(renderer)
+        // this.control = new OrbitControls(this.cameras[0], renderer.domElement)
+        // this.control.minDistance = 10
+        // this.control.maxDistance = 100
+        // this.control.enableRotate = false
     }
 
     render() {
-        const effect = this.effect
         const cameras = this.cameras
+        const effect = this.effect
         effect.clear()
         effect.setViewport(0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT)
         effect.render(scene, this.cameras[0])
@@ -83,13 +83,12 @@ class IrisReviser {
 
         effect.setViewport(SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4, 0, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2)
         effect.render(scene, cameras[4])
-        this.cameras.forEach(cam => cam.updateProjectionMatrix())
     }
 
     onResize() {
         const aspect = window.innerWidth / window.innerHeight
-        const cameras = this.cameras
         this.effect.setSize(window.innerWidth, window.innerHeight)
+        const cameras = this.cameras
 
         cameras[0].left = 0.5 * frustumSize * aspect / -2
         cameras[0].right = 0.5 * frustumSize * aspect / 2
@@ -123,14 +122,30 @@ class IrisReviser {
     }
 
     setCameraToTarget(meshes) {
+        
         const first = meshes[0]
+        first.geometry.computeBoundingBox()
+        const box = new Box3()
+        box.copy(first.geometry.boundingBox)
+        const width = box.max.x - box.min.x
+        const height = box.max.y - box.min.y
+        console.log(width, height)
 
         const face = first.skeleton.bones[8]
         console.log(face)
         const faceCenter = new Vector3()
-        // face.geometry.computeBoundingBox()
-        // face.geometry.boundingBox.getCenter(faceCenter)
+        faceCenter.setFromMatrixPosition(face.matrixWorld)
+        
+        // face.getWorldPosition(faceCenter)
 
+        this.cameras.forEach(cam => {
+            cam.position.set(faceCenter.x, faceCenter.y, 20)
+            cam.zoom = 1.2
+            cam.near = 15
+            cam.lookAt(faceCenter)
+            cam.updateProjectionMatrix()
+        })
+        
         // console.log(faceCenter)
         // const eye = model.skeleton.bones[88]
         // eye.getWorldPosition(this.cameras[0].position)
@@ -141,6 +156,9 @@ class IrisReviser {
     }
 
     async setModel(url) {
+        console.log(renderer.state)
+        this.effect.clear()
+        console.log(renderer.state)
         const loader = new MMDLoader()
         const onProgress = xhr => {
             if (xhr.lengthComputable) {
@@ -172,6 +190,10 @@ class IrisReviser {
             cam.updateProjectionMatrix()
         })
         this.setCameraToTarget(this.meshes)
+        this.cameras.forEach(cam => {
+            renderer.render(scene, cam)
+        })
+
     }
 
     async cleanMeshes() {
@@ -203,7 +225,7 @@ const init = async () => {
     reviser.setModel(modelList[modelIndex])
 }
 
-window.addEventListener('resize', reviser.onResize)
+window.addEventListener('resize', () => { reviser.onResize() })
 
 document.addEventListener('keydown', async ({ key }) => {
     if (key == 'a' || key == 'A') {
