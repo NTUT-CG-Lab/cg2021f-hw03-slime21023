@@ -7,6 +7,7 @@ import {
     Vector3,
     Box3,
 } from './build/three.module.js'
+import { OrbitControls } from './jsm/controls/OrbitControls.js'
 import { OutlineEffect } from './jsm/effects/OutlineEffect.js'
 import { MMDLoader } from './jsm/loaders/MMDLoader.js'
 
@@ -18,7 +19,7 @@ const container = document.createElement('div')
 document.body.appendChild(container)
 
 const modelList = [
-    'models/mmd/kizunaai/kizunaai.pmx',
+    // 'models/mmd/kizunaai/kizunaai.pmx',
     // 'models/mmd/るいのれ式物述有栖_配布用フォルダ/物述有栖.pmx',
     'models/mmd/『天宮こころ(Kokoro Amamiya)』/『天宮こころ(Kokoro Amamiya)』.pmx'
 ]
@@ -46,12 +47,32 @@ const animate = () => {
 
 Promise.all(modelList.map(loadModel)).then(models => {
     reviser = new IrisReviser(models)
-    // console.log(models)
     Ammo().then(AmmoLib => {
         Ammo = AmmoLib
         animate()
     })
 })
+
+const getBonePosition = mesh => {
+    const names = ["首", "頭", "左目", "右目"]
+    const { bones } = mesh.skeleton
+    const positions = names.map(n => {
+        const target = bones.filter(bone => bone.name == n)[0]
+        const position = new Vector3()
+        position.setFromMatrixPosition(target.matrixWorld)
+        return position
+    })
+
+    return {
+        neck: positions[0],
+        head: positions[1],
+        // headFront: positions[2],
+        lefteye: positions[2],
+        // lefteyeFront: positions[4],
+        righteye: positions[3],
+        // righteyeFront: positions[6]
+    }
+}
 
 const createResource = () => {
     const renderer = new WebGLRenderer({ antialias: true })
@@ -85,6 +106,28 @@ const createResource = () => {
     return { renderer, scene, effect, cameras }
 }
 
+const setCameraPosition = (cam, position, renderer, isCtrl) => {
+
+    const control = new OrbitControls(cam, renderer.domElement)
+    control.autoRotate = false
+    control.enabled = false
+    control.minZoom = 5
+
+    if (isCtrl) {
+        control.enabled = true
+        control.enableRotate = false
+    }
+
+    const pos = position.clone()
+    pos.setZ(pos.z + 10)
+
+    cam.position.copy(pos)
+    control.target.copy(position)
+    // cam.lookAt(position)
+    // cam.updateProjectionMatrix()
+    control.update()
+}
+
 class IrisReviser {
     constructor(models) {
         this.models = models
@@ -106,7 +149,11 @@ class IrisReviser {
                 cam.layers.set(index)
                 cam.updateProjectionMatrix()
             })
-            return { renderer, scene, effect, cameras, meshes }
+
+            const positions = getBonePosition(model)
+            const controls = cameras.map((cam, index) => setCameraPosition(cam, positions.head, renderer, index == 0))
+
+            return { renderer, scene, effect, cameras, meshes, positions, controls }
         })
         this.res = resources
         const target = this.res[this.modelIndex]
